@@ -287,7 +287,7 @@ body {
 <body>
 <!-- Password Gate -->
 <div id="lockScreen">
-  <div class="lock-logo">☘️</div>
+  <div class="lock-logo" id="lockLogo">☘️</div>
   <h2>Shamrock Quote Tool</h2>
   <p>Enter password to continue</p>
   <input type="password" id="lockPass" placeholder="Password" autocomplete="off" onkeydown="if(event.key==='Enter')unlock();">
@@ -846,7 +846,7 @@ function calculate() {
     const g4=gv('vin-g4'), g5=gv('vin-g5'), gd4=gv('vin-gd4');
     const totalGates = g4+g5+gd4;
     const gatePosts = totalGates * 2;
-    const gateInserts = gatePosts;
+    const gateInserts = g4 + g5 + gd4*2; // 1 insert per gate leaf
 
     matCost = panels*P.vin.panel + totalPosts*P.vin.post + totalPosts*P.vin.cap + totalPosts*P.vin.concrete
            + gatePosts*P.vin.post + gatePosts*P.vin.cap + gatePosts*P.vin.concrete + gateInserts*P.vin.gateInsert;
@@ -964,6 +964,10 @@ function calculate() {
     gateCost = gate3Cost + gate4Cost + gate5Cost + pcap138Cost + malehingeCost + femhingeCost + forklatchCost + latchcollarCost + droprodCost;
     gateSell = sg3*P.cl.gs3 + sg4*P.cl.gs4 + sg5*P.cl.gs5 + dg8*P.cl.gsd8 + dg10*P.cl.gsd10;
 
+    // Apply 7% material tax (chain link)
+    matCost = matCost * 1.07;
+    gateCost = gateCost * 1.07;
+
     // Build takeoff with section headers
     takeoffItems = [];
     // Fabric & Framework section
@@ -1061,6 +1065,9 @@ function calculate() {
     gateCost = 0; // zeroed so it's not double-counted downstream
     gateSell = 0;
 
+    // Apply 7% material tax (wood)
+    matCost = matCost * 1.07;
+
     takeoffItems = [
       ['── Fence Line ──', '', ''],
       ['Pickets '+picketLabel, totalPickets, picketCost],
@@ -1078,6 +1085,12 @@ function calculate() {
       takeoffItems.push(["Gate Post Concrete", gatePosts, gatePostConcrete]);
       takeoffItems.push(["Hardware Sets", totalGates, gateHdwCost]);
     }
+    // Combined picket total for ordering
+    const allPickets = totalPickets + gatePicketsTotal;
+    if(allPickets > 0) {
+      takeoffItems.push(['── Order Summary ──', '', '']);
+      takeoffItems.push(["TOTAL PICKETS TO ORDER", allPickets, allPickets*picketPrice]);
+    }
 
     // Wood: no sell-price tags (all costs go through margin)
   }
@@ -1094,13 +1107,14 @@ function calculate() {
   const totalJobCost = matCost + gateCost + laborCost + teardownCharge;
   const smallJob = (lf > 0 && lf < P.sjLF) ? P.sjFee : 0;
 
-  // Margin-based sell price: all costs through margin
-  const costForMargin = matCost + gateCost + laborCost + teardownCharge;
+  // Margin-based sell price: fence costs through margin, gates use fixed sell prices
+  // Teardown is a flat pass-through — NOT marked up
+  const costForMargin = matCost + laborCost;
   const sellMin = Math.ceil(costForMargin / (1 - P.margin/100));
-  let totalQuote = sellMin + gateSell + smallJob;
+  let totalQuote = sellMin + gateSell + smallJob + teardownCharge;
 
-  // Ensure total job margin meets target
-  const minTotal = Math.ceil(totalJobCost / (1 - P.margin/100));
+  // Ensure total job margin meets target (gate costs & teardown excluded from margin calc)
+  const minTotal = Math.ceil((matCost + laborCost) / (1 - P.margin/100)) + gateSell + smallJob + teardownCharge;
   if (totalQuote < minTotal) totalQuote = minTotal;
 
   totalQuote = Math.ceil(totalQuote / 25) * 25;
@@ -1402,6 +1416,18 @@ function unlock() {
     setTimeout(()=>document.getElementById('lockError').textContent='', 2000);
   }
 }
+// Copy header logo to lock screen
+(function(){
+  const hdrLogo = document.querySelector('.header-logo');
+  if(hdrLogo && hdrLogo.src) {
+    const lockDiv = document.getElementById('lockLogo');
+    lockDiv.innerHTML = '';
+    const img = document.createElement('img');
+    img.src = hdrLogo.src;
+    img.style.cssText = 'width:80px;height:80px;object-fit:contain;border-radius:12px;';
+    lockDiv.appendChild(img);
+  }
+})();
 // Auto-unlock if already authenticated this session
 if(sessionStorage.getItem(PASS_KEY)==='1') {
   document.getElementById('lockScreen').classList.add('hidden');
